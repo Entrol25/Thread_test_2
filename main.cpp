@@ -1,80 +1,197 @@
 ﻿// https://www.youtube.com/watch?v=d4gHLx3bklc 
-//#include "stdafx.h" // не находит
+// https://youtu.be/RK1FNI9bztQ 
 #include <Windows.h> // VOID
-//#include <stdio.h> // wprintf()
-//#include <malloc.h>
-//------------------
 #include <iostream>// вывод в консоль 
-//using namespace std;//
+#include <time.h>// 
+using namespace std;//
 
-int countth = 0;
+#define COUNT_THREADS 4
+#define ITERATIONS 10
 
-#define COUNT_THREADS 3
-//
-VOID MultiThread(VOID);
-DWORD WINAPI WorkThread_0(LPVOID param);
-DWORD WINAPI WorkThread_1(LPVOID param);
-DWORD WINAPI WorkThread_2(LPVOID param);
+//               структура 
+CRITICAL_SECTION section = { 0 }; // критическая секция
 
-int main()//-----------------------------------------------------------------//
+VOID NotCriticalSection(VOID);
+VOID CriticalSection(VOID);
+
+DWORD WINAPI NoCritSecFunc(LPVOID lpParam);
+DWORD WINAPI CritSecFunc(LPVOID lpParam);
+
+// Mutex - объект взаимного исключения.
+DWORD iVal = 0;// переменная значения 
+HANDLE hMutex = NULL;// дескриптор Mutex-а
+
+VOID Mutex(VOID);
+DWORD WINAPI Func_0(LPVOID lpParam);
+DWORD WINAPI Func_1(LPVOID lpParam);
+DWORD WINAPI Func_2(LPVOID lpParam);
+DWORD WINAPI Func_3(LPVOID lpParam);
+
+int main(int argc, char* args[])//--------------------------------------//
 {
-	MultiThread();
-	/*while(true)
-	{
-		if (countth == 3) { break; }
-	}*/
+	srand((unsigned)time(0));
+	//NotCriticalSection();
+	//CriticalSection();
+	Mutex();
 	//---------
-	return 1;//
+	return 0;//
 	system("pause"); // задержка консоли до нажатия любой клавиши
 }
-VOID MultiThread(VOID)
+VOID NotCriticalSection(VOID)
 {
-	HANDLE hArr[COUNT_THREADS];
-	//HANDLE hArr[3];
-	
-	hArr[0] = CreateThread(NULL, 0, WorkThread_0, NULL, 0, 0);
-	hArr[1] = CreateThread(NULL, 0, WorkThread_1, NULL, 0, 0);
-	hArr[2] = CreateThread(NULL, 0, WorkThread_2, NULL, 0, 0);
+	HANDLE threads[COUNT_THREADS];// массив 4 потоков 
+
+	for (DWORD i = 0; i < COUNT_THREADS; ++i)
+	{
+		DWORD *tmp = new DWORD;// для корректного взятия ++i
+		*tmp = i;// для корректного взятия ++i          // i 
+		threads[i] = CreateThread(NULL, 0, NoCritSecFunc, tmp, 0, 0);
+	}
 	// ожидает несколько потоков
 	// WARNING! Не INFINITY , а INFINITE.============================
-	WaitForMultipleObjects(COUNT_THREADS, hArr, TRUE, INFINITE);
-	wprintf(L"--- WaitForMultipleObjects() --- \n");
+	WaitForMultipleObjects(COUNT_THREADS, threads, TRUE, INFINITE);
 	// 1 - кол-во потоков.
 	// 2 - указатель на массив.
 	// 3 - TRUE дождаться всех потоков. FALSE дождаться одного потока.
 	// 4 - INFINITE ждать до бесконечности, или в милисекундах.
 
-	// ожидает один поток
-	//WaitForSingleObject(hArr[0], INFINITE);
-}
-// wprintf(L"i = ", i) // выодит всё сообщение
-DWORD WINAPI WorkThread_0(LPVOID lpParameter)
-{
-	for (int i = 0; i < 10; ++i)
+	for (size_t i = 0; i < COUNT_THREADS; ++i)
 	{
-		wprintf(L"Message 0: %d\n", i);
+		if(threads[i] != INVALID_HANDLE_VALUE)// закрываем потоки 
+		{ CloseHandle(threads[i]); }
 	}
-	++countth;
-	wprintf(L"--- 0 --- \n");
+}
+DWORD WINAPI NoCritSecFunc(LPVOID lpParam)
+{
+	for (DWORD i = 0; i < ITERATIONS; ++i)
+	{
+		wcout << L"Thread " << *(DWORD*)lpParam << L" : " << i << endl;
+		Sleep(rand() % 16 + 10);
+	}
 	ExitThread(0);
 }
-DWORD WINAPI WorkThread_1(LPVOID param)
+//--------------------------------------------------------------------------------
+// синхронизирует потоки в нутри одного процесса !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+VOID CriticalSection(VOID)// Критическая секция 
 {
-	for (int i = 0; i < 10; ++i)
+	HANDLE threads[COUNT_THREADS];// массив 4 потоков 
+
+	InitializeCriticalSection(&section);// Initialize !!!!!!!!!!!!!!!!!!!!!
+
+	for (DWORD i = 0; i < COUNT_THREADS; ++i)
 	{
-		wprintf(L"Message 1: %d\n", i);
+		DWORD* tmp = new DWORD;// для корректного взятия ++i
+		*tmp = i;// для корректного взятия ++i          // i 
+		threads[i] = CreateThread(NULL, 0, CritSecFunc, tmp, 0, 0);
 	}
-	++countth;
-	wprintf(L"--- 1 --- \n");
+	// ожидает несколько потоков
+	// WARNING! Не INFINITY , а INFINITE.============================
+	WaitForMultipleObjects(COUNT_THREADS, threads, TRUE, INFINITE);
+	// 1 - кол-во потоков.
+	// 2 - указатель на массив.
+	// 3 - TRUE дождаться всех потоков. FALSE дождаться одного потока.
+	// 4 - INFINITE ждать до бесконечности, или в милисекундах.
+
+	DeleteCriticalSection(&section);// Delete !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+	for (size_t i = 0; i < COUNT_THREADS; ++i)
+	{
+		if (threads[i] != INVALID_HANDLE_VALUE)// закрываем потоки 
+		{ CloseHandle(threads[i]); }
+	}
+}
+DWORD WINAPI CritSecFunc(LPVOID lpParam)// Критическая секция 
+{
+	for (DWORD i = 0; i < ITERATIONS; ++i)
+	{
+		EnterCriticalSection(&section);// заблокировать другие потоки
+
+		wcout << L"Thread " << *(DWORD*)lpParam << L" : " << i << endl;
+
+		LeaveCriticalSection(&section);// разблокировать другие потоки
+
+		Sleep(rand() % 16 + 10);
+	}
 	ExitThread(0);
 }
-DWORD WINAPI WorkThread_2(LPVOID param)
+//--------------------------------------------------------------------------------
+// синхронизирует потоки в нутри нескольких процессов !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+VOID Mutex(VOID)// Каждый поток выполнил iVal++;
 {
-	for (int i = 0; i < 10; ++i)
-	{
-		wprintf(L"Message 2: %d\n", i);
+	//     структура 
+	HANDLE globalThreads[COUNT_THREADS] = { 0 };// массив 4 потоков 
+
+	hMutex = CreateMutex(NULL, FALSE, L"Same name");
+	// 1 - указатель на структуру безопасности
+	// 2 - FALSE ждущий. TRUE активный
+	// 3 - имя Mutex-а против множественного открытия 
+	globalThreads[0] = CreateThread(NULL, 0, Func_0, NULL, NULL, 0);
+	globalThreads[1] = CreateThread(NULL, 0, Func_1, NULL, NULL, 0);
+	globalThreads[2] = CreateThread(NULL, 0, Func_2, NULL, NULL, 0);
+	globalThreads[3] = CreateThread(NULL, 0, Func_3, NULL, NULL, 0);
+	// ожидает несколько потоков
+	// WARNING! Не INFINITY , а INFINITE.============================
+	WaitForMultipleObjects(COUNT_THREADS, globalThreads, TRUE, INFINITE);
+	// 1 - кол-во потоков.
+	// 2 - указатель на массив.
+	// 3 - TRUE дождаться всех потоков. FALSE дождаться одного потока.
+	// 4 - INFINITE ждать до бесконечности, или в милисекундах.
+
+	// закрываем потоки 
+	if(globalThreads[0] != INVALID_HANDLE_VALUE)
+	{ CloseHandle(globalThreads[0]); }
+	if (globalThreads[1] != INVALID_HANDLE_VALUE)
+	{ CloseHandle(globalThreads[1]); }
+	if (globalThreads[2] != INVALID_HANDLE_VALUE)
+	{ CloseHandle(globalThreads[2]); }
+	if (globalThreads[3] != INVALID_HANDLE_VALUE)
+	{ CloseHandle(globalThreads[3]); }
+}
+DWORD WINAPI Func_0(LPVOID lpParam)
+{
+	while (iVal < ITERATIONS)// while (iVal < ITERATIONS)
+	{// ожидаем разморозки Mutex. Другие потоки заморожены.
+		WaitForSingleObject(hMutex, INFINITE);
+		wcout << L"Func0: " << iVal << endl;
+		iVal++;
+		// Другие потоки разморожены.
+		ReleaseMutex(hMutex);
 	}
-	++countth;
-	wprintf(L"--- 2 --- \n");
+	ExitThread(0);
+}
+DWORD WINAPI Func_1(LPVOID lpParam)
+{
+	while (iVal < ITERATIONS)// while (iVal < ITERATIONS)
+	{// ожидаем разморозки Mutex. Другие потоки заморожены.
+		WaitForSingleObject(hMutex, INFINITE);
+		wcout << L"Func1: " << iVal << endl;
+		iVal++;
+		// Другие потоки разморожены.
+		ReleaseMutex(hMutex);
+	}
+	ExitThread(0);
+}
+DWORD WINAPI Func_2(LPVOID lpParam)
+{
+	while (iVal < ITERATIONS)// while (iVal < ITERATIONS)
+	{// ожидаем разморозки Mutex. Другие потоки заморожены.
+		WaitForSingleObject(hMutex, INFINITE);
+		wcout << L"Func2: " << iVal << endl;
+		iVal++;
+		// Другие потоки разморожены.
+		ReleaseMutex(hMutex);
+	}
+	ExitThread(0);
+}
+DWORD WINAPI Func_3(LPVOID lpParam)
+{
+	while (iVal < ITERATIONS)// while (iVal < ITERATIONS)
+	{// ожидаем разморозки Mutex. Другие потоки заморожены.
+		WaitForSingleObject(hMutex, INFINITE);
+		wcout << L"Func3: " << iVal << endl;
+		iVal++;
+		// Другие потоки разморожены.
+		ReleaseMutex(hMutex);
+	}
 	ExitThread(0);
 }
